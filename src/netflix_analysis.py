@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -37,8 +36,12 @@ def find_dataset_file(dataset_dir: str | os.PathLike[str] = DATASET_DIR) -> Path
 
 def load_dataset(path: str | os.PathLike[str] | None = None) -> pd.DataFrame:
     """Load the Netflix dataset selecting the correct Pandas reader based on file type."""
-    dataset_path = Path(path) if path is not None else find_dataset_file()
-    dataset_path = dataset_path if dataset_path.exists() else find_dataset_file(dataset_path.parent)
+    if path is None:
+        dataset_path = find_dataset_file()
+    else:
+        dataset_path = Path(path)
+        if not dataset_path.exists():
+            raise FileNotFoundError(f"Dataset file does not exist: {dataset_path}")
     suffix = dataset_path.suffix.lower()
 
     if suffix == ".csv":
@@ -154,15 +157,13 @@ def content_added_in_year(df: pd.DataFrame, year: int | str) -> pd.DataFrame:
 
 def count_unique_countries(df: pd.DataFrame) -> tuple[int, int]:
     """Return (count excluding Unknown, count of Unknown rows)."""
-    unique_countries = set(
-        country.strip()
-        for country in df["country"].astype(str).str.split(",")
-        .explode()
-        .str.strip()
-        .tolist()
-        if country.strip() and country.strip() != "Unknown"
+    country_values = (
+        df["country"].fillna("Unknown").astype(str).str.split(",").explode().str.strip()
     )
-    unknown_count = int((df["country"].astype(str).str.strip() == "Unknown").sum())
+    unique_countries = set(
+        country for country in country_values.tolist() if country and country != "Unknown"
+    )
+    unknown_count = int((df["country"].fillna("Unknown").astype(str).str.strip() == "Unknown").sum())
     return len(unique_countries), unknown_count
 
 
@@ -201,8 +202,12 @@ def print_menu() -> None:
 def run_menu(df: pd.DataFrame) -> None:
     """Run the interactive menu-driven application."""
     while True:
-        print_menu()
-        choice = input("Choose an option (0-10): ").strip()
+        try:
+            print_menu()
+            choice = input("Choose an option (0-10): ").strip()
+        except EOFError:
+            print("\nInput stream closed. Exiting the application.")
+            break
 
         if choice == "0":
             print("Thank you for using Netflix Content Explorer. Goodbye!")
